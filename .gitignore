@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+
+# uv
+.python-version
+
+# Runtime output
+output*/
+*.wav
+*.mp4
+*.mp3
+*.m4a
+
+# Cache (Hugging Face / faster-whisper model weights)
+.cache/
+__pycache__/
+
+# Test cache
+.pytest_cache/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

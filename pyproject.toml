@@ -1,0 +1,21 @@
+[project]
+name = "ytcc"
+version = "0.1.0"
+description = "Long-form audio/video transcription CLI"
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.1",
+    "faster-whisper>=1.1",
+]
+
+[project.scripts]
+ytcc = "ytcc.cli:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.0",
+]
