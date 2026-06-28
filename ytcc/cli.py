@@ -7,6 +7,7 @@ from ytcc.asr.faster_whisper_backend import FasterWhisperBackend
 from ytcc.chunking.chunk_manager import process_chunks
 from ytcc.config import Config
 from ytcc.ingest.ffmpeg import extract_chunks
+from ytcc.ingest.ytdlp import download_audio
 from ytcc.storage.cleanup import delete_chunk
 from ytcc.storage.state import State, load_state, save_state
 
@@ -16,8 +17,12 @@ def cli() -> None:
     """Long-form audio/video transcription tool."""
 
 
+def _is_url(source: str) -> bool:
+    return source.startswith("http://") or source.startswith("https://")
+
+
 @cli.command()
-@click.argument("source", type=click.Path(exists=True, path_type=Path))
+@click.argument("source", type=str)
 @click.option("--out", required=True, type=click.Path(path_type=Path), help="Output directory")
 @click.option("--model", default="base", show_default=True, help="Whisper model size")
 @click.option("--device", default="auto", show_default=True, help="auto, cpu, or cuda")
@@ -33,7 +38,7 @@ def transcribe(
     language: str | None,
     chunk_duration: int,
 ) -> None:
-    """Transcribe SOURCE audio/video file."""
+    """Transcribe SOURCE audio/video file or URL."""
     out.mkdir(parents=True, exist_ok=True)
     chunks_dir = out / "chunks"
     device = resolve_device(device)
@@ -47,8 +52,22 @@ def transcribe(
         language=language,
     )
 
-    click.echo(f"Extracting chunks from {source} ...")
-    chunk_paths = extract_chunks(source, chunks_dir, config)
+    tmp_audio: Path | None = None
+    if _is_url(source):
+        click.echo(f"Downloading audio from {source} ...")
+        tmp_audio = download_audio(source, out)
+        click.echo(f"  → {tmp_audio.name}")
+        source_path = tmp_audio
+    else:
+        source_path = Path(source)
+        if not source_path.exists():
+            raise click.ClickException(f"File not found: {source_path}")
+
+    click.echo(f"Extracting chunks from {source_path.name} ...")
+    chunk_paths = extract_chunks(source_path, chunks_dir, config)
+
+    if tmp_audio is not None:
+        tmp_audio.unlink(missing_ok=True)
     click.echo(f"  → {len(chunk_paths)} chunks created")
 
     state = State(
@@ -113,15 +132,19 @@ def resume(
 @cli.command()
 @click.argument("out_dir", type=click.Path(exists=True, path_type=Path))
 def clean(out_dir: Path) -> None:
-    """Delete leftover chunks in OUT_DIR (keeps transcript and state)."""
+    """Delete leftover chunks and temp audio in OUT_DIR (keeps transcript and state)."""
     chunks_dir = out_dir / "chunks"
     removed = 0
     if chunks_dir.exists():
         for chunk in chunks_dir.glob("chunk_*.wav"):
             delete_chunk(chunk)
             removed += 1
-        chunks_dir.rmdir() if not any(chunks_dir.iterdir()) else None
-    click.echo(f"Removed {removed} chunk file(s).")
+        if not any(chunks_dir.iterdir()):
+            chunks_dir.rmdir()
+    for tmp in out_dir.glob("source_audio.*"):
+        tmp.unlink(missing_ok=True)
+        removed += 1
+    click.echo(f"Removed {removed} file(s).")
 
 
 def _print_summary(out_dir: Path, state: State) -> None:

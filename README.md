@@ -15,15 +15,23 @@ uv sync
 - `ffmpeg` — audio normalization and chunking
 - CUDA + cuDNN — optional, only needed for `--device cuda`
 
+`yt-dlp` is included as a Python dependency and installed automatically by `uv sync`.
+
 Whisper model weights are downloaded automatically on first run (~150 MB for the default `base` model).
 
 ## Usage
 
-### Transcribe a file
+### Transcribe a file or URL
 
 ```bash
+# Local file
 uv run ytcc transcribe meeting.mp4 --out ./output
+
+# YouTube URL (or any yt-dlp supported platform)
+uv run ytcc transcribe "https://www.youtube.com/watch?v=XXXX" --out ./output --language zh
 ```
+
+For URL input, audio is downloaded to a temp file, chunked, transcribed, then cleaned up automatically.
 
 Options:
 
@@ -72,66 +80,15 @@ output/
 ## Architecture
 
 ```
-ytcc/
-  cli.py                        # click entry point
-  config.py                     # default parameters
-  models.py                     # Segment dataclass
-  ingest/ffmpeg.py              # ffmpeg transcoding + chunking
-  asr/base.py                   # ASRBackend interface
-  asr/faster_whisper_backend.py # faster-whisper implementation
-  chunking/chunk_manager.py     # main loop, global timestamp offset
-  storage/state.py              # state.json checkpoint
-  storage/transcript_writer.py  # append to .md and .jsonl
-  storage/cleanup.py            # delete / move chunks
+ingest/ytdlp.py   URL → temp audio file ─┐
+ingest/ffmpeg.py  file → WAV chunks      ├→ chunk_manager → ASR → storage
 ```
 
-The `ASRBackend` interface is designed to be swappable — a `whisper.cpp` backend can be added without touching the rest of the pipeline.
-
-## Transcribing from a YouTube / livestream URL
-
-Phase 2 is not yet built into the CLI, but the pipeline can be wired up manually with `yt-dlp` and `ffmpeg`:
-
-```bash
-# Install yt-dlp (not managed by uv — install globally or in a separate venv)
-pip install yt-dlp
-```
-
-**Option A — download audio first, then transcribe**
-
-Suitable when disk space is not a concern:
-
-```bash
-yt-dlp -f bestaudio -o meeting.%(ext)s "https://www.youtube.com/watch?v=XXXX"
-uv run ytcc transcribe meeting.webm --out ./output --language zh
-```
-
-**Option B — stream through ffmpeg, avoid storing the full audio**
-
-`yt-dlp` pipes raw audio to `ffmpeg`, which writes fixed-length WAV chunks directly.
-A separate process then transcribes and deletes each chunk as it appears.
-
-```bash
-# Terminal 1: stream download → ffmpeg chunks
-mkdir -p output/chunks
-yt-dlp -f bestaudio -o - "https://www.youtube.com/watch?v=XXXX" \
-  | ffmpeg -i pipe:0 \
-           -vn -ac 1 -ar 16000 \
-           -f segment -segment_time 300 \
-           output/chunks/chunk_%03d.wav
-
-# Terminal 2: transcribe as chunks arrive
-# (run after chunk_000.wav appears; chunk N is complete once chunk N+1 starts)
-uv run ytcc transcribe output/chunks/chunk_000.wav --out ./output --language zh
-# then resume for subsequent chunks:
-uv run ytcc resume ./output
-```
-
-> **How chunk completion is detected:** ffmpeg's segment muxer closes `chunk_N.wav` and opens `chunk_N+1.wav` atomically. So `chunk_N` is safe to transcribe as soon as `chunk_N+1` appears on disk. The final chunk is complete when the ffmpeg process exits.
-
-This two-terminal approach will be replaced by an integrated `ytcc transcribe URL` command in Phase 2, which runs both sides as threads within the same process.
+Both ingest paths converge at the same chunking and transcription pipeline. The `ASRBackend` interface is swappable — a `whisper.cpp` backend can be added without touching the rest of the pipeline.
 
 ## Roadmap
 
-- [ ] Phase 2: YouTube URL input via `yt-dlp` streaming pipeline
+- [ ] Async streaming pipeline for live streams (yt-dlp | ffmpeg pipe, producer/consumer)
+- [ ] Additional platform support (Bilibili, Twitch — yt-dlp handles these already)
 - [ ] Overlap + deduplication between chunks
 - [ ] LLM-based summarization
