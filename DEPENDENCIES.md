@@ -26,6 +26,10 @@ winget install ffmpeg
 - Install the CUDA toolkit matching your driver: https://developer.nvidia.com/cuda-downloads
 - cuDNN 8.x is required by CTranslate2 (the faster-whisper backend)
 
+### Apple Silicon GPU (MLX)
+Nothing extra to install: `mlx-whisper` is a Python dependency limited to macOS arm64, so `uv sync` installs it on Apple Silicon only. Used by `--device mlx` (and by `--device auto` on those Macs).
+
 ### Whisper model weights
-Downloaded automatically by `faster-whisper` on first use to `~/.cache/huggingface/hub/`.
-Default model is `base` (~150 MB). Available sizes: `tiny`, `base`, `small`, `medium`, `large-v3`.
+Downloaded automatically on first use to `~/.cache/huggingface/hub/`.
+Default model is `base` (~150 MB). Available sizes: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`.
+The `mlx` device uses separate MLX-format weights from the `mlx-community` Hugging Face org, so the first run on a new device downloads that model again.

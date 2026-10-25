@@ -2,14 +2,15 @@ from pathlib import Path
 
 import click
 
-from ytcc.asr.device import resolve_device
-from ytcc.asr.faster_whisper_backend import FasterWhisperBackend
+from ytcc.asr.device import create_backend, resolve_device
 from ytcc.chunking.chunk_manager import process_chunks
 from ytcc.config import Config
 from ytcc.ingest.ffmpeg import extract_chunks
 from ytcc.ingest.ytdlp import download_audio
 from ytcc.storage.cleanup import delete_chunk
 from ytcc.storage.state import State, load_state, save_state
+
+DEVICES = click.Choice(["auto", "cpu", "cuda", "mlx"])
 
 
 @click.group()
@@ -25,7 +26,7 @@ def _is_url(source: str) -> bool:
 @click.argument("source", type=str)
 @click.option("--out", required=True, type=click.Path(path_type=Path), help="Output directory")
 @click.option("--model", default="base", show_default=True, help="Whisper model size")
-@click.option("--device", default="auto", show_default=True, help="auto, cpu, or cuda")
+@click.option("--device", type=DEVICES, default="auto", show_default=True, help="mlx = Apple Silicon GPU")
 @click.option("--compute-type", default="int8", show_default=True, help="Quantization type")
 @click.option("--language", default=None, help="Language code (e.g. zh, en). Default: auto-detect")
 @click.option("--chunk-duration", default=300, show_default=True, help="Chunk length in seconds")
@@ -43,6 +44,8 @@ def transcribe(
     chunks_dir = out / "chunks"
     device = resolve_device(device)
     click.echo(f"Using device: {device}")
+    # Built before ingest so a bad --model fails fast instead of after the download
+    backend = create_backend(device, model, compute_type, language)
 
     config = Config(
         chunk_duration_sec=chunk_duration,
@@ -79,13 +82,6 @@ def transcribe(
     )
     save_state(out, state)
 
-    backend = FasterWhisperBackend(
-        model_size=model,
-        device=device,
-        compute_type=compute_type,
-        language=language,
-    )
-
     process_chunks(chunk_paths, out, state, backend)
 
     _print_summary(out, state)
@@ -94,7 +90,7 @@ def transcribe(
 @cli.command()
 @click.argument("out_dir", type=click.Path(exists=True, path_type=Path))
 @click.option("--model", default="base", show_default=True)
-@click.option("--device", default="auto", show_default=True)
+@click.option("--device", type=DEVICES, default="auto", show_default=True)
 @click.option("--compute-type", default="int8", show_default=True)
 @click.option("--language", default=None)
 def resume(
@@ -118,12 +114,7 @@ def resume(
     device = resolve_device(device)
     click.echo(f"Using device: {device}")
 
-    backend = FasterWhisperBackend(
-        model_size=model,
-        device=device,
-        compute_type=compute_type,
-        language=language,
-    )
+    backend = create_backend(device, model, compute_type, language)
 
     process_chunks(chunk_paths, out_dir, state, backend)
     _print_summary(out_dir, state)
