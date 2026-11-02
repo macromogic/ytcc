@@ -1041,6 +1041,8 @@ dependencies = [
     { name = "click" },
     { name = "faster-whisper" },
     { name = "mlx-whisper", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "yt-dlp" },
 ]
 
@@ -1054,6 +1056,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.1" },
     { name = "faster-whisper", specifier = ">=1.1" },
     { name = "mlx-whisper", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'", specifier = ">=0.4" },
+    { name = "numpy", specifier = ">=1.26" },
     { name = "yt-dlp", specifier = ">=2024.1" },
 ]
 

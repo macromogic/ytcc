@@ -1,27 +1,29 @@
 ---
 name: ytcc-transcribe
-description: Transcribe a local audio or video file, or a yt-dlp-supported video URL, with this repository's ytcc CLI. Optionally summarize the resulting transcript when the user asks for a summary or notes.
+description: Transcribe a local audio or video file, a meeting recording, or a yt-dlp-supported video URL with this repository's ytcc CLI. Optionally summarize the resulting transcript.
 ---
 
 # Transcribe with ytcc
 
-Run the `ytcc` command from any directory; machines set up by nix-config have it on PATH. Without it, use `uv run ytcc` from the ytcc repository root instead. The CLI turns a local media file or supported URL into `transcript.md`, `segments.jsonl`, and `state.json`. Summarization is a separate, optional step performed from those outputs.
+Run the `ytcc` command from any directory; machines set up by nix-config have it on PATH. Without it, use `uv run ytcc` from the ytcc repository root instead. Transcription runs locally. Summaries via `--summarize` or `ytcc summarize` send the transcript to Anthropic through `claude -p`.
 
 ## Run
 
-1. Identify the source and choose a new, dedicated output directory. Never run `ytcc transcribe` into a directory containing an earlier transcript: the CLI appends to its output files.
-2. Run `ytcc transcribe SOURCE --out OUT_DIR`. Quote the source and output path. Pass user-requested CLI options such as `--model`, `--device`, or `--language`. For Chinese/English mixed speech, leave language auto-detection on unless the user specifies otherwise; mention that the current backend may still make mistakes at language switches.
-3. Inspect `state.json` after the command. Consider the transcript complete only when `failed_chunks` is empty and the number of `processed_chunks` equals `total_chunks`. Report failures or missing output clearly. Do not treat the CLI's zero exit status or “Done” message alone as proof of completeness.
-4. Return the paths to `transcript.md` and `segments.jsonl`, plus any material limits noticed during the run. Keep the original media file.
+1. Identify the source and choose a new output directory. ytcc refuses a non-empty one.
+2. For a meeting, run `ytcc meeting SOURCE --out OUT_DIR`, or `ytcc meeting --me MIC_TRACK --others SYSTEM_TRACK --out OUT_DIR` when the recording has the microphone and the call audio as separate files. Add `--title` and `--summarize` when wanted. For anything else, run `ytcc transcribe SOURCE --out OUT_DIR`. Quote paths. Pass user-requested options such as `--model`, `--device` or `--language`; leave language auto-detection on for Chinese/English mixed speech unless told otherwise.
+3. A nonzero exit status means the transcript is incomplete. Check `state.json` (in each `tracks/*/` for meetings): `windows` marked `failed` can be retried with `ytcc resume OUT_DIR --retry-failed`; a `position` short of `duration` means the run was interrupted, and `ytcc resume OUT_DIR` continues it with the original settings.
+4. Return the paths to `transcript.md`, `segments.jsonl` and `summary.md` if written. Keep the original media files.
 
-URLs must be supported by yt-dlp and accessible to the user; site restrictions or authentication can still block download. Do not work around access controls. First use may download Whisper model weights.
+URLs must be supported by yt-dlp and accessible to the user; do not work around access controls. First use may download Whisper model weights.
 
-## Optional summary
+## Speakers
 
-Summarize only when requested. Read the entire completed transcript, using `segments.jsonl` for timestamped evidence. For a long recording, process it in time order and cover all chunks before combining notes. Write `summary.md` in the same output directory unless the user requests another location.
+With `--me/--others`, lines are labeled `Me` (the user's microphone) and `Others` (everyone else in the call, mixed). There is no further speaker separation; never invent identities for "Others".
 
-Choose a structure that fits the content: for a meeting, capture topics, decisions, action items, owners, and open questions; for a talk or video, capture the main ideas. Include timestamps for substantive claims. Preserve the source language or follow the user's requested output language. Mark uncertain names, owners, and decisions as uncertain, and avoid inventing speaker identities; current ytcc output has no speaker labels. If transcription is partial, explain the gap and only summarize it when the user explicitly requests a partial summary.
+## Summary
 
-## Resume
+Summarize only when requested. Prefer `ytcc summarize OUT_DIR` (or `--summarize`), which writes `summary.md` with overview, topics, decisions, action items, open questions and glossary suggestions. When summarizing by hand instead, read the whole transcript, use timestamps for claims, follow the transcript's language, mark uncertain owners and decisions as uncertain, and only summarize a partial transcript when the user explicitly asks.
 
-`ytcc resume OUT_DIR` can continue remaining chunks, but the current state file does not preserve model or language settings. Reuse the same options from the original run. Failed chunks are moved to `failed_chunks/` and are not retried by `resume` automatically. Do not rerun `transcribe` in the same output directory to recover from a failure.
+## Glossary
+
+`~/.config/ytcc/glossary.md` holds names and terms Whisper should spell correctly: one `- term` bullet per term, optionally `- term — note` (the note is not sent to Whisper). It is used automatically; `--no-glossary` disables it. Whisper's prompt holds 223 tokens (roughly 800 English characters or 100–200 Chinese characters); terms are kept from the top until it is full, and ytcc warns about the rest. Summaries get the whole glossary.

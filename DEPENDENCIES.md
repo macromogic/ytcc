@@ -31,5 +31,5 @@ Nothing extra to install: `mlx-whisper` is a Python dependency limited to macOS 
 
 ### Whisper model weights
 Downloaded automatically on first use to `~/.cache/huggingface/hub/`.
-Default model is `base` (~150 MB). Available sizes: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`.
+Default model is `large-v3-turbo` (~1.6 GB). Available sizes: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`.
 The `mlx` device uses separate MLX-format weights from the `mlx-community` Hugging Face org, so the first run on a new device downloads that model again.

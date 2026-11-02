@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "click>=8.1",
     "faster-whisper>=1.1",
+    "numpy>=1.26",
     "mlx-whisper>=0.4 ; platform_machine == 'arm64' and sys_platform == 'darwin'",
     "yt-dlp>=2024.1",
 ]
@@ -21,3 +22,6 @@ build-backend = "hatchling.build"
 dev-dependencies = [
     "pytest>=8.0",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
