@@ -32,3 +32,8 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# Raycast extension
+node_modules/
+raycast/dist/
+raycast/raycast-env.d.ts

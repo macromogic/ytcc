@@ -64,6 +64,33 @@ uv run ytcc meeting --me mic.m4a --others system.m4a --out ./standup --title "We
 
 `--summarize`, or `ytcc summarize OUT_DIR` later, writes `summary.md` (overview, topics, decisions, action items, open questions, glossary suggestions) with `claude -p`. This sends the transcript to Anthropic; transcription itself stays local.
 
+### Recording meetings (macOS)
+
+```bash
+ytcc record start --title "Weekly sync"   # microphone + call audio
+ytcc record stop                          # saves, then transcribes in the background
+ytcc record status                        # JSON: current recording
+ytcc record detect                        # JSON: apps using the microphone
+```
+
+Recordings go to `~/Meetings/<date>_<time>_<title>/` (`--dir` or `$YTCC_MEETINGS_DIR` to change): `me.m4a` from the microphone, `others.m4a` with everything the Mac plays, `recording.json`, and `transcript/` once `ytcc meeting` has run. A notification says when the transcript is ready. `start --summarize` also writes a summary; `--echo-cancel` removes speaker sound from the microphone track when you are not using headphones.
+
+System audio comes from a Core Audio process tap (macOS 14.4+), so nothing needs to be rerouted: output device and volume keys keep working, and BlackHole isn't needed. The helper is a small Swift program, `ytcc/recorder/ytcc_rec.swift`, compiled with `swiftc` from the Xcode Command Line Tools on first use (cached in `~/.cache/ytcc/bin/`). Both tracks are aligned to one clock, and the files stay readable if the helper dies mid-recording.
+
+The first recording asks for Microphone and System Audio Recording permission for the app that started ytcc (Terminal, Raycast, …). Without permission macOS records silence rather than failing; ytcc's notification warns when a track was silent throughout.
+
+#### Raycast
+
+`raycast/` is a Raycast extension with a menu bar item (recording time, start/stop; every 10 s it checks whether an app is using the microphone and then shows “Record?” and sends a notification) and Start/Stop Meeting Recording commands. To install it locally:
+
+```bash
+cd raycast
+npm install
+npm run dev   # imports the extension into Raycast; stop with Ctrl-C afterwards
+```
+
+Then enable the “Meeting Recorder” menu bar command in Raycast. Its preferences cover summaries, detection notifications, the recordings folder, and the ytcc path (found through your login shell by default).
+
 ### Glossary
 
 `~/.config/ytcc/glossary.md` lists names and terms Whisper should spell correctly, one `- term` bullet each (`- term — note` keeps a note out of the prompt). It is passed to every Whisper decode. Whisper's prompt holds at most 223 tokens (roughly 800 characters of English, 100–200 Chinese characters); terms are kept from the top of the file until that is full, and ytcc warns about the rest, so put the most important terms first. `--summarize` and `ytcc summarize` give Claude the whole glossary, notes included, to correct names in the summary.
@@ -106,7 +133,8 @@ A meeting directory also has `meeting.json`, `summary.md` when summarized, and `
 ## Architecture
 
 ```
-ingest/ytdlp.py   URL → local audio file ─┐
+recorder/         mic + call audio → files ┐
+ingest/ytdlp.py   URL → local audio file ─┤
 audio.py          decode window → numpy   ├→ pipeline → ASR → storage
                                           └→ meeting.py: merge tracks, summarize
 ```
@@ -121,5 +149,4 @@ uv run pytest
 
 ## Roadmap
 
-- [ ] Meeting recorder: macOS helper that records microphone + call audio (Core Audio process tap), with a Raycast UI and meeting detection
 - [ ] Async streaming pipeline for live streams and live meetings

@@ -13,7 +13,7 @@ from ytcc.storage.transcript_writer import append_segments, fmt_time, render_tra
 # How far around the nominal window length to look for a pause to cut at
 SEARCH_SEC = 30.0
 
-Decoder = Callable[[Path, float, float], np.ndarray]
+Decoder = Callable[[Path, float, float | None], np.ndarray]
 
 
 def run(
@@ -47,12 +47,20 @@ def run(
 
         remaining = state.duration - start
         try:
-            if remaining <= target + SEARCH_SEC:
-                # Last window: read to the end (+1 s in case the probed duration is short)
-                samples = decode(source, start, remaining + 1)
-                end = state.duration
+            last = remaining <= target + SEARCH_SEC
+            # The last window reads to the end of the file, whatever the probed
+            # duration says (it is only an estimate for some formats)
+            samples = decode(source, start, None if last else target + SEARCH_SEC)
+            got = len(samples) / audio.SAMPLE_RATE
+            if last or got < target + SEARCH_SEC - 1:
+                if got == 0:  # the file ended before the probed duration
+                    state.duration = start
+                    save_state(out_dir, state)
+                    click.echo("end of audio")
+                    break
+                end = start + got
+                state.duration = end
             else:
-                samples = decode(source, start, target + SEARCH_SEC)
                 cut = audio.find_cut(samples, target, SEARCH_SEC)
                 samples = samples[: int(cut * audio.SAMPLE_RATE)]
                 end = start + cut

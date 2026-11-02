@@ -1,0 +1,90 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "ytcc-meetings",
+  "title": "ytcc Meetings",
+  "description": "Record meetings and transcribe them locally with ytcc",
+  "icon": "icon.png",
+  "author": "macromogic",
+  "license": "MIT",
+  "categories": [
+    "Productivity"
+  ],
+  "commands": [
+    {
+      "name": "menu-bar",
+      "title": "Meeting Recorder",
+      "subtitle": "ytcc",
+      "description": "Shows the recording state and offers to record when an app is using the microphone",
+      "mode": "menu-bar",
+      "interval": "10s"
+    },
+    {
+      "name": "start",
+      "title": "Start Meeting Recording",
+      "subtitle": "ytcc",
+      "description": "Record the microphone and the call audio",
+      "mode": "no-view",
+      "arguments": [
+        {
+          "name": "title",
+          "placeholder": "Title",
+          "type": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "stop",
+      "title": "Stop Meeting Recording",
+      "subtitle": "ytcc",
+      "description": "Stop recording and transcribe in the background",
+      "mode": "no-view"
+    }
+  ],
+  "preferences": [
+    {
+      "name": "summarize",
+      "title": "Summary",
+      "label": "Summarize with Claude after transcribing",
+      "description": "Runs `claude -p`, which sends the transcript to Anthropic. Transcription itself stays local.",
+      "type": "checkbox",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "notify",
+      "title": "Meeting detection",
+      "label": "Notify when an app starts using the microphone",
+      "description": "The menu bar item always shows it; this also sends a notification.",
+      "type": "checkbox",
+      "default": true,
+      "required": false
+    },
+    {
+      "name": "meetingsDir",
+      "title": "Recordings folder",
+      "description": "Empty: $YTCC_MEETINGS_DIR, else ~/Meetings",
+      "type": "textfield",
+      "required": false
+    },
+    {
+      "name": "ytccPath",
+      "title": "ytcc command",
+      "description": "Empty: look up ytcc and PATH in your login shell",
+      "type": "textfield",
+      "required": false
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.17",
+    "@types/react": "19.0.10",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "build": "ray build -e dist",
+    "dev": "ray develop"
+  }
+}

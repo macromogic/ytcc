@@ -16,6 +16,10 @@ Run the `ytcc` command from any directory; machines set up by nix-config have it
 
 URLs must be supported by yt-dlp and accessible to the user; do not work around access controls. First use may download Whisper model weights.
 
+## Recordings
+
+`ytcc record start/stop` (macOS) saves meetings under `~/Meetings/` (or `$YTCC_MEETINGS_DIR`) and runs `ytcc meeting` on them automatically; the transcript is in each recording's `transcript/` directory. To redo one, run `ytcc meeting --me me.m4a --others others.m4a --out NEW_DIR` from its folder.
+
 ## Speakers
 
 With `--me/--others`, lines are labeled `Me` (the user's microphone) and `Others` (everyone else in the call, mixed). There is no further speaker separation; never invent identities for "Others".

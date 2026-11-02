@@ -26,12 +26,12 @@ def probe_duration(source: Path) -> float:
         raise RuntimeError(f"ffprobe reported no duration for {source}") from exc
 
 
-def decode(source: Path, start: float, length: float) -> np.ndarray:
-    """Decode [start, start + length) of source to 16 kHz mono float32, in memory."""
+def decode(source: Path, start: float, length: float | None) -> np.ndarray:
+    """Decode [start, start + length) of source, or to its end, to 16 kHz mono float32 in memory."""
     cmd = [
         "ffmpeg", "-nostdin", "-v", "error",
         "-ss", f"{start:.3f}",
-        "-t", f"{length:.3f}",
+        *(["-t", f"{length:.3f}"] if length is not None else []),
         "-i", str(source),
         "-vn",
         "-ac", "1",

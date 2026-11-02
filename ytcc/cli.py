@@ -1,10 +1,11 @@
 import functools
+import json
 from datetime import datetime
 from pathlib import Path
 
 import click
 
-from ytcc import audio, glossary, meeting, pipeline
+from ytcc import audio, glossary, meeting, pipeline, recorder
 from ytcc.asr.base import PROMPT_TOKENS, ASRBackend
 from ytcc.asr.device import create_backend, resolve_device
 from ytcc.ingest.ytdlp import download_audio
@@ -272,6 +273,63 @@ def clean(out_dir: Path) -> None:
         if not any(chunks_dir.iterdir()):
             chunks_dir.rmdir()
     click.echo(f"Removed {removed} file(s).")
+
+
+@cli.group()
+def record() -> None:
+    """Record meetings on macOS (microphone + call audio)."""
+
+
+@record.command(name="start")
+@click.option("--title", default=None, help="Meeting title, also used in the folder name")
+@click.option(
+    "--dir", "base_dir", type=click.Path(file_okay=False, path_type=Path), default=None,
+    help=f"Where recordings go  [default: $YTCC_MEETINGS_DIR or {recorder.default_meetings_dir()}]",
+)
+@click.option("--summarize", is_flag=True, help="Summarize with `claude -p` after transcribing (sends it to Anthropic)")
+@click.option("--echo-cancel", is_flag=True, help="Remove speaker sound from the mic track (when not using headphones)")
+def record_start(title: str | None, base_dir: Path | None, summarize: bool, echo_cancel: bool) -> None:
+    """Start recording the microphone and the call audio."""
+    try:
+        rec = recorder.start(title, base_dir or recorder.default_meetings_dir(), summarize, echo_cancel)
+    except recorder.RecorderError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Recording into {rec.dir}")
+
+
+@record.command(name="stop")
+@click.option("--no-transcribe", is_flag=True, help="Only save the audio")
+def record_stop(no_transcribe: bool) -> None:
+    """Stop recording and transcribe in the background (notifies when done)."""
+    try:
+        rec = recorder.stop(transcribe=not no_transcribe)
+    except recorder.RecorderError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Saved {rec.dir}")
+    if not no_transcribe:
+        click.echo(f"Transcribing in the background; log: {Path(rec.dir) / 'transcribe.log'}")
+
+
+@record.command(name="status")
+def record_status() -> None:
+    """Print the current recording as JSON."""
+    click.echo(json.dumps(recorder.status(), ensure_ascii=False))
+
+
+@record.command(name="detect")
+def record_detect() -> None:
+    """Print apps using the microphone as JSON."""
+    try:
+        click.echo(json.dumps(recorder.detect(), ensure_ascii=False))
+    except recorder.RecorderError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+@record.command(name="process", hidden=True)
+@click.argument("rec_dir", type=click.Path(exists=True, file_okay=False, path_type=Path))
+def record_process(rec_dir: Path) -> None:
+    """Transcribe a stopped recording (run by `record stop`)."""
+    raise SystemExit(recorder.process(rec_dir))
 
 
 def _finish_meeting(

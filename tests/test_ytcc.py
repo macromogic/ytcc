@@ -33,9 +33,10 @@ class FakeBackend(ASRBackend):
         return len(text)
 
 
-def fake_decode(source, start, length):
+def fake_decode(source, start, length, real_duration=200):
     # 1 kHz tone with a silent second every 10 s (at 9-10 s, 19-20 s, ...)
-    t = np.arange(int(start * SR), int(start * SR + length * SR)) / SR
+    stop = real_duration if length is None else min(start + length, real_duration)
+    t = np.arange(int(start * SR), int(stop * SR)) / SR
     tone = 0.3 * np.sin(2 * np.pi * 1000 * t)
     tone[(t % 10) >= 9] = 0
     return tone.astype(np.float32)
@@ -66,6 +67,16 @@ def test_windows_cut_in_pauses_and_cover_everything(tmp_path):
     segments = read_segments(tmp_path)
     assert [round(s.start - 0.5, 3) for s in segments] == [round(w.start, 3) for w in state.windows]
     assert (tmp_path / "transcript.md").read_text().startswith("[00:00:00] call 1")
+
+
+@pytest.mark.parametrize("probed", [150, 260])
+def test_probed_duration_off(tmp_path, probed):
+    # Real audio is 200 s; the probed duration is only an estimate
+    state = make_state(duration=probed)
+    pipeline.run(tmp_path, state, FakeBackend(), decode=fake_decode)
+    assert state.complete
+    assert state.windows[-1].end == pytest.approx(200, abs=0.01)
+    assert state.duration == pytest.approx(200, abs=0.01)
 
 
 def test_failed_window_is_retried(tmp_path):
