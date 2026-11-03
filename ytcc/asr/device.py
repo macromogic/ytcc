@@ -50,14 +50,13 @@ def create_backend(
     device: str,
     model_size: str,
     compute_type: str,
-    language: str | None,
     prompt: str | None = None,
 ) -> ASRBackend:
     """Build the ASR backend for a device returned by resolve_device()."""
     if device == "mlx":
         from ytcc.asr.mlx_whisper_backend import MLXWhisperBackend
         try:
-            return MLXWhisperBackend(model_size=model_size, language=language, prompt=prompt)
+            return MLXWhisperBackend(model_size=model_size, prompt=prompt)
         except ValueError as exc:
             raise click.ClickException(str(exc)) from exc
 
@@ -66,6 +65,5 @@ def create_backend(
         model_size=model_size,
         device=device,
         compute_type=compute_type,
-        language=language,
         prompt=prompt,
     )

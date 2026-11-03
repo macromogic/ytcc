@@ -13,12 +13,17 @@ class ASRBackend(ABC):
     prompt: str | None = None  # Whisper prompt (glossary terms etc.) for every decode
 
     @abstractmethod
-    def transcribe(self, audio: np.ndarray) -> list[Segment]:
+    def transcribe(self, audio: np.ndarray, language: str | None) -> list[Segment]:
         """
-        Transcribe 16 kHz mono float32 audio.
+        Transcribe 16 kHz mono float32 audio; language None detects it from the first 30 s.
 
         Returned timestamps are window-local (start from 0).
         """
+        ...
+
+    @abstractmethod
+    def detect_language(self, audio: np.ndarray) -> tuple[str, float]:
+        """Most likely language of the first 30 s of audio, and its probability."""
         ...
 
     @abstractmethod

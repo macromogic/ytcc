@@ -72,7 +72,7 @@ def _backend(options: Options, glossary_file: Path | None = None) -> ASRBackend:
     options.prompt, as many as fit Whisper's prompt limit.
     """
     click.echo(f"Using device: {options.device}, model: {options.model}")
-    backend = create_backend(options.device, options.model, options.compute_type, options.language)
+    backend = create_backend(options.device, options.model, options.compute_type)
     terms = glossary.load_terms(glossary_file) if glossary_file else []
     if glossary_file and terms:
         try:

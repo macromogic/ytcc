@@ -260,7 +260,41 @@ final class SystemRecorder {
     }
 }
 
+/// Whether this process (attributed to the app that launched it, e.g. Raycast)
+/// may capture system audio, asking the user if they haven't decided yet.
+/// Without permission the tap records silence instead of failing, so check up
+/// front. There is no public API for this; the TCC calls are the ones
+/// Apple's own audio-capture sample apps rely on. nil means unknown.
+func systemAudioAllowed() -> Bool? {
+    guard let tcc = dlopen("/System/Library/PrivateFrameworks/TCC.framework/Versions/A/TCC", RTLD_NOW),
+          let preflightSym = dlsym(tcc, "TCCAccessPreflight"),
+          let requestSym = dlsym(tcc, "TCCAccessRequest")
+    else { return nil }
+    typealias Preflight = @convention(c) (CFString, CFDictionary?) -> Int
+    typealias Request = @convention(c) (CFString, CFDictionary?, @escaping (Bool) -> Void) -> Void
+    let service = "kTCCServiceAudioCapture" as CFString
+    switch unsafeBitCast(preflightSym, to: Preflight.self)(service, nil) {
+    case 0: return true
+    case 1: return false
+    default:
+        var granted = false
+        let done = DispatchSemaphore(value: 0)
+        unsafeBitCast(requestSym, to: Request.self)(service, nil) { granted = $0; done.signal() }
+        done.wait()
+        return granted
+    }
+}
+
+struct PermissionDenied: Error, CustomStringConvertible {
+    var description: String {
+        "system-audio-denied: the app that started ytcc (e.g. Raycast) may not record system audio, "
+            + "so the call would be silent. Allow it in System Settings > Privacy & Security > "
+            + "Screen & System Audio Recording, then start again."
+    }
+}
+
 func record(mic: URL, system: URL, echoCancel: Bool) throws -> Never {
+    if systemAudioAllowed() == false { throw PermissionDenied() }
     let start = mach_absolute_time()
     let systemRecorder = try SystemRecorder(url: system, startHostTime: start)
     let micRecorder: MicRecorder

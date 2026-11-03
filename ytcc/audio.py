@@ -70,13 +70,9 @@ def find_cut(audio: np.ndarray, target: float, search: float, frame: float = 0.1
     return (lo + best * frame_len + frame_len / 2) / SAMPLE_RATE
 
 
-def split_at_pauses(audio: np.ndarray, target: float, search: float) -> list[tuple[float, np.ndarray]]:
-    """Split audio into pieces of about target seconds, cut in pauses. Returns (offset, piece) pairs."""
-    pieces = []
-    offset = 0
-    while len(audio) - offset > (target + search) * SAMPLE_RATE:
-        cut = offset + int(find_cut(audio[offset:], target, search) * SAMPLE_RATE)
-        pieces.append((offset / SAMPLE_RATE, audio[offset:cut]))
-        offset = cut
-    pieces.append((offset / SAMPLE_RATE, audio[offset:]))
-    return pieces
+def speech_regions(audio: np.ndarray) -> list[tuple[float, float]]:
+    """Return the (start, end) seconds of speech in audio, found with Silero VAD."""
+    from faster_whisper.vad import VadOptions, get_speech_timestamps
+
+    stamps = get_speech_timestamps(audio, VadOptions(min_silence_duration_ms=500))
+    return [(t["start"] / SAMPLE_RATE, t["end"] / SAMPLE_RATE) for t in stamps]

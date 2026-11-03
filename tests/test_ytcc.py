@@ -23,11 +23,17 @@ class FakeBackend(ASRBackend):
         self.calls = 0
         self.fail_calls = set(fail_calls)
 
-    def transcribe(self, samples):
+    def transcribe(self, samples, language):
         self.calls += 1
         if self.calls in self.fail_calls:
             raise RuntimeError("boom")
-        return [Segment(0.5, len(samples) / SR, f"call {self.calls}")]
+        return [
+            Segment(0.5, len(samples) / SR, f"call {self.calls}"),
+            Segment(0.5, 3, "Thank you."),  # over silence, see fake_speech
+        ]
+
+    def detect_language(self, samples):
+        return "en", 1.0
 
     def count_tokens(self, text):
         return len(text)
@@ -40,6 +46,15 @@ def fake_decode(source, start, length, real_duration=200):
     tone = 0.3 * np.sin(2 * np.pi * 1000 * t)
     tone[(t % 10) >= 9] = 0
     return tone.astype(np.float32)
+
+
+def fake_speech(samples):
+    # Speech everywhere except the first 4 s
+    return [(4.0, len(samples) / SR)]
+
+
+def run(out_dir, state, backend, **kwargs):
+    pipeline.run(out_dir, state, backend, decode=fake_decode, speech=fake_speech, **kwargs)
 
 
 def make_state(duration, window=60):
@@ -55,7 +70,7 @@ def test_find_cut_picks_silence():
 
 def test_windows_cut_in_pauses_and_cover_everything(tmp_path):
     state = make_state(duration=200)
-    pipeline.run(tmp_path, state, FakeBackend(), decode=fake_decode)
+    run(tmp_path, state, FakeBackend())
 
     assert state.complete
     assert state.windows[0].start == 0
@@ -63,7 +78,7 @@ def test_windows_cut_in_pauses_and_cover_everything(tmp_path):
     for prev, nxt in zip(state.windows, state.windows[1:]):
         assert prev.end == nxt.start
         assert 9 <= prev.end % 10 <= 10  # cut inside a pause
-    # Segment times are global
+    # Segment times are global; "Thank you." over silence is dropped
     segments = read_segments(tmp_path)
     assert [round(s.start - 0.5, 3) for s in segments] == [round(w.start, 3) for w in state.windows]
     assert (tmp_path / "transcript.md").read_text().startswith("[00:00:00] call 1")
@@ -73,7 +88,7 @@ def test_windows_cut_in_pauses_and_cover_everything(tmp_path):
 def test_probed_duration_off(tmp_path, probed):
     # Real audio is 200 s; the probed duration is only an estimate
     state = make_state(duration=probed)
-    pipeline.run(tmp_path, state, FakeBackend(), decode=fake_decode)
+    run(tmp_path, state, FakeBackend())
     assert state.complete
     assert state.windows[-1].end == pytest.approx(200, abs=0.01)
     assert state.duration == pytest.approx(200, abs=0.01)
@@ -81,11 +96,11 @@ def test_probed_duration_off(tmp_path, probed):
 
 def test_failed_window_is_retried(tmp_path):
     state = make_state(duration=200)
-    pipeline.run(tmp_path, state, FakeBackend(fail_calls={2}), decode=fake_decode)
+    run(tmp_path, state, FakeBackend(fail_calls={2}))
     assert len(state.failed) == 1 and not state.complete
 
     state = load_state(tmp_path)  # resume from disk
-    pipeline.run(tmp_path, state, FakeBackend(), retry_failed=True, decode=fake_decode)
+    run(tmp_path, state, FakeBackend(), retry_failed=True)
     assert state.complete
     starts = [s.start for s in read_segments(tmp_path)]
     assert starts == sorted(starts) and len(starts) == len(state.windows)
@@ -137,9 +152,3 @@ def test_decode_with_ffmpeg(tmp_path):
     assert abs(len(samples) / SR - 2) < 0.05
     assert samples.dtype == np.float32 and np.abs(samples).max() > 0.1
 
-
-def test_split_at_pauses_covers_audio():
-    samples = fake_decode(None, 0, 95)
-    pieces = audio.split_at_pauses(samples, target=25, search=4)
-    assert sum(len(p) for _, p in pieces) == len(samples)
-    assert all(len(p) / SR <= 29.5 for _, p in pieces)

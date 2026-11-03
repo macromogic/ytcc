@@ -79,6 +79,7 @@ def default_meetings_dir() -> Path:
 
 
 STATE_FILE = _state_home() / "recording.json"
+PRIVACY_SETTINGS = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
 
 
 # MARK: helper binary
@@ -201,7 +202,15 @@ def start(title: str | None, base_dir: Path, summarize: bool, echo_cancel: bool)
     deadline = time.monotonic() + 120
     while "recording" not in log.read_text():
         if proc.poll() is not None:
-            raise RecorderError(f"The recorder exited:\n{log.read_text().strip()}")
+            output = log.read_text().strip()
+            if "system-audio-denied" in output:
+                shutil.rmtree(out)
+                subprocess.run(["open", PRIVACY_SETTINGS], capture_output=True)
+                raise RecorderError(
+                    "Not allowed to record call audio. Allow the app that started ytcc under "
+                    "Screen & System Audio Recording, then start again."
+                )
+            raise RecorderError(f"The recorder exited:\n{output}")
         if time.monotonic() > deadline:
             proc.terminate()
             raise RecorderError("The recorder did not start within 2 minutes.")
@@ -238,9 +247,11 @@ def stop(transcribe: bool = True) -> Recording:
     STATE_FILE.unlink(missing_ok=True)
 
     if transcribe:
+        # Keep idle sleep from pausing transcription on a laptop left alone after the meeting
+        caffeinate = shutil.which("caffeinate")
         with (out / "transcribe.log").open("w") as f:
             subprocess.Popen(
-                [sys.executable, "-m", "ytcc", "record", "process", str(out)],
+                [*([caffeinate, "-i"] if caffeinate else []), sys.executable, "-m", "ytcc", "record", "process", str(out)],
                 stdout=f, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True,
             )
     return rec

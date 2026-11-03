@@ -1,8 +1,11 @@
 import importlib
 from contextlib import contextmanager
 
+import mlx.core as mx
 import mlx_whisper
+from mlx_whisper.audio import N_FRAMES, log_mel_spectrogram, pad_or_trim
 from mlx_whisper.tokenizer import get_tokenizer
+from mlx_whisper.transcribe import ModelHolder
 import numpy as np
 
 from ytcc.asr.base import ASRBackend
@@ -26,7 +29,6 @@ class MLXWhisperBackend(ASRBackend):
     def __init__(
         self,
         model_size: str = "large-v3-turbo",
-        language: str | None = None,
         prompt: str | None = None,
     ) -> None:
         if "/" in model_size:
@@ -38,15 +40,14 @@ class MLXWhisperBackend(ASRBackend):
                 f"Unknown model {model_size!r} for mlx; "
                 f"use one of {', '.join(_MODEL_REPOS)} or a Hugging Face repo id."
             )
-        self._language = language
         self.prompt = prompt
 
-    def transcribe(self, audio: np.ndarray) -> list[Segment]:
+    def transcribe(self, audio: np.ndarray, language: str | None) -> list[Segment]:
         with _prompt_every_decode(self.prompt):
             result = mlx_whisper.transcribe(
                 audio,
                 path_or_hf_repo=self._repo,
-                language=self._language,
+                language=language,
                 # No built-in VAD like faster-whisper's vad_filter; these limit
                 # hallucinations that repeat across silent stretches.
                 condition_on_previous_text=False,
@@ -58,6 +59,14 @@ class MLXWhisperBackend(ASRBackend):
             for s in result["segments"]
             if s["text"].strip()
         ]
+
+    def detect_language(self, audio: np.ndarray) -> tuple[str, float]:
+        # The same model instance and steps mlx_whisper.transcribe uses
+        model = ModelHolder.get_model(self._repo, mx.float16)
+        mel = log_mel_spectrogram(audio, n_mels=model.dims.n_mels)
+        _, probs = model.detect_language(pad_or_trim(mel, N_FRAMES, axis=-2).astype(mx.float16))
+        language = max(probs, key=probs.get)
+        return language, probs[language]
 
     def count_tokens(self, text: str) -> int:
         # Same BPE vocabulary for every multilingual Whisper model; only the
