@@ -47,6 +47,7 @@ Options:
 | `--prompt` | | Extra text for Whisper, e.g. topic or names |
 | `--glossary` | `~/.config/ytcc/glossary.md` | Glossary file; `--no-glossary` to skip it |
 | `--window` | `300` | Target window length in seconds |
+| `--zh-script` | `simplified` | Script for Chinese windows: `simplified`, `traditional`, or `keep` what Whisper wrote (it mixes both). Converted with OpenCC, so a glossary term spelled in the other script is converted too |
 
 The exit status is nonzero when any window failed.
 

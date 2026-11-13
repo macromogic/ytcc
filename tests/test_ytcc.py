@@ -259,3 +259,42 @@ def test_language_averaged_over_speech_pieces():
     # Less than 30 s of speech is scored as one piece
     backend = LanguageBackend([later])
     assert pipeline._detect_language(backend, samples, [(0.0, 20.0)], None) == "zh"
+
+
+class ChineseBackend(FakeBackend):
+    def __init__(self, language):
+        super().__init__()
+        self.language = language
+
+    def transcribe(self, samples, language):
+        return [Segment(0.5, 2.0, "對啊，這個 OK")]
+
+    def detect_language(self, samples):
+        return {self.language: 1.0}
+
+
+@pytest.mark.parametrize(
+    "language, script, expected",
+    [
+        ("zh", "simplified", "对啊，这个 OK"),
+        ("zh", "traditional", "對啊，這個 OK"),
+        ("zh", "keep", "對啊，這個 OK"),
+        ("ja", "simplified", "對啊，這個 OK"),  # only Chinese windows are converted
+    ],
+)
+def test_chinese_script(tmp_path, language, script, expected):
+    state = make_state(duration=50)
+    state.options.zh_script = script
+    run(tmp_path, state, ChineseBackend(language))
+    assert [s.text for s in read_segments(tmp_path)] == [expected]
+
+
+def test_old_state_without_zh_script_resumes(tmp_path):
+    import json
+
+    state = make_state(duration=50)
+    pipeline.save_state(tmp_path, state)
+    data = json.loads((tmp_path / "state.json").read_text())
+    del data["options"]["zh_script"]
+    (tmp_path / "state.json").write_text(json.dumps(data))
+    assert load_state(tmp_path).options.zh_script == "simplified"

@@ -13,6 +13,7 @@ class Options:
     language: str | None
     prompt: str | None
     window_sec: int
+    zh_script: str = "simplified"  # Chinese output: simplified, traditional or keep (as Whisper wrote it)
 
 
 @dataclass

@@ -39,11 +39,17 @@ def asr_options(f):
     )
     @click.option("--no-glossary", is_flag=True, help="Don't use the glossary")
     @click.option(
+        "--zh-script", type=click.Choice(["simplified", "traditional", "keep"]), default="simplified",
+        show_default=True, help="Script for Chinese output; Whisper mixes the two",
+    )
+    @click.option(
         "--window", "--chunk-duration", "window", default=300, show_default=True,
         help="Target window length in seconds; windows end at the nearest pause",
     )
     @functools.wraps(f)
-    def wrapper(*args, model, device, compute_type, language, prompt, glossary_path, no_glossary, window, **kwargs):
+    def wrapper(
+        *args, model, device, compute_type, language, prompt, glossary_path, no_glossary, window, zh_script, **kwargs
+    ):
         options = Options(
             model=model,
             device=resolve_device(device),
@@ -51,6 +57,7 @@ def asr_options(f):
             language=language,
             prompt=prompt,  # glossary terms are added by _backend()
             window_sec=window,
+            zh_script=zh_script,
         )
         glossary_file = None if no_glossary else (glossary_path or glossary.default_path())
         return f(*args, options=options, glossary_file=glossary_file, **kwargs)

@@ -1,3 +1,4 @@
+import functools
 import math
 import re
 from collections.abc import Callable
@@ -53,6 +54,9 @@ MAX_COMPRESSION_RATIO = 2.4
 #   repeated backchannels ("嗯", "对") as low as -1.5.
 LOOP_MIN_REPEATS = 3
 LOOP_MAX_LOGPROB = -2.0
+
+# OpenCC conversions for Options.zh_script
+ZH_CONVERSIONS = {"simplified": "t2s", "traditional": "s2t"}
 
 Decoder = Callable[[Path, float, float | None], np.ndarray]
 SpeechFinder = Callable[[np.ndarray], list[tuple[float, float]]]
@@ -144,6 +148,8 @@ def _transcribe(
             for seg in segments:
                 seg.start, seg.end = speech_map.span(seg.start, seg.end)
             segments = _drop_loops([s for s in segments if _is_speech(s, regions)])
+            if language == "zh":
+                _convert_script(segments, state.options.zh_script)
         else:
             segments = []  # don't let Whisper hallucinate over silence
     except Exception as exc:
@@ -213,6 +219,22 @@ def _is_speech(segment: Segment, regions: list[tuple[float, float]]) -> bool:
         return False
     overlap = sum(max(0.0, min(b, segment.end) - max(a, segment.start)) for a, b in regions)
     return overlap >= min(MIN_SPEECH_SEC, MIN_SPEECH_RATIO * (segment.end - segment.start))
+
+
+def _convert_script(segments: list[Segment], script: str) -> None:
+    """Write Chinese segments in one script; Whisper switches between them mid-meeting."""
+    if script not in ZH_CONVERSIONS:
+        return
+    converter = _opencc(ZH_CONVERSIONS[script])
+    for seg in segments:
+        seg.text = converter.convert(seg.text)
+
+
+@functools.cache
+def _opencc(config: str):
+    import opencc
+
+    return opencc.OpenCC(config)
 
 
 def _drop_loops(segments: list[Segment]) -> list[Segment]:

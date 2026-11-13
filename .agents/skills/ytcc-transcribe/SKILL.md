@@ -10,7 +10,7 @@ Run the `ytcc` command from any directory; machines set up by nix-config have it
 ## Run
 
 1. Identify the source and choose a new output directory. ytcc refuses a non-empty one.
-2. For a meeting, run `ytcc meeting SOURCE --out OUT_DIR`, or `ytcc meeting --me MIC_TRACK --others SYSTEM_TRACK --out OUT_DIR` when the recording has the microphone and the call audio as separate files. Add `--title` and `--summarize` when wanted. For anything else, run `ytcc transcribe SOURCE --out OUT_DIR`. Quote paths. Pass user-requested options such as `--model`, `--device` or `--language`; leave language auto-detection on for Chinese/English mixed speech unless told otherwise.
+2. For a meeting, run `ytcc meeting SOURCE --out OUT_DIR`, or `ytcc meeting --me MIC_TRACK --others SYSTEM_TRACK --out OUT_DIR` when the recording has the microphone and the call audio as separate files. Add `--title` and `--summarize` when wanted. For anything else, run `ytcc transcribe SOURCE --out OUT_DIR`. Quote paths. Pass user-requested options such as `--model`, `--device` or `--language`; leave language auto-detection on for Chinese/English mixed speech unless told otherwise. Chinese is written in Simplified characters; pass `--zh-script traditional` (or `keep`) when the user wants otherwise.
 3. A nonzero exit status means the transcript is incomplete. Check `state.json` (in each `tracks/*/` for meetings): `windows` marked `failed` can be retried with `ytcc resume OUT_DIR --retry-failed`; a `position` short of `duration` means the run was interrupted, and `ytcc resume OUT_DIR` continues it with the original settings.
 4. Return the paths to `transcript.md`, `segments.jsonl` and `summary.md` if written. Keep the original media files.
 

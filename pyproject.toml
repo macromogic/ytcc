@@ -9,6 +9,7 @@ dependencies = [
     "numpy>=1.26",
     "mlx-whisper>=0.4 ; platform_machine == 'arm64' and sys_platform == 'darwin'",
     "yt-dlp>=2024.1",
+    "opencc>=1.4.2",
 ]
 
 [project.scripts]
