@@ -296,14 +296,25 @@ struct PermissionDenied: Error, CustomStringConvertible {
 func record(mic: URL, system: URL, echoCancel: Bool) throws -> Never {
     if systemAudioAllowed() == false { throw PermissionDenied() }
     let start = mach_absolute_time()
-    let systemRecorder = try SystemRecorder(url: system, startHostTime: start)
-    let micRecorder: MicRecorder
+    // Microphone first, system audio second. Opening the input moves a
+    // Bluetooth headset from A2DP to its call profile; when that happened
+    // under an aggregate device that was created but had not run yet, the tap
+    // delivered nothing for the whole recording, with no error (9 of 30 starts
+    // in pasrom/meeting-transcriber's measurements, 0 of 30 in this order).
+    // The order doesn't shift the tracks: both are aligned to `start`.
+    let micRecorder = try MicRecorder(url: mic, startHostTime: start, echoCancel: echoCancel)
+    try micRecorder.start()
+    let systemRecorder: SystemRecorder
     do {
-        micRecorder = try MicRecorder(url: mic, startHostTime: start, echoCancel: echoCancel)
-        try systemRecorder.start()
-        try micRecorder.start()
+        systemRecorder = try SystemRecorder(url: system, startHostTime: start)
+        do {
+            try systemRecorder.start()
+        } catch {
+            systemRecorder.teardown()
+            throw error
+        }
     } catch {
-        systemRecorder.teardown()
+        micRecorder.stop()
         throw error
     }
     print("recording")  // `ytcc record start` waits for this line
