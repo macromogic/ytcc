@@ -43,7 +43,7 @@ Options:
 | `--model` | `large-v3-turbo` | Whisper model size: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo` |
 | `--device` | `auto` | `auto` (CUDA, else Apple Silicon GPU, else CPU), `cpu`, `cuda`, or `mlx` |
 | `--compute-type` | `int8` | Quantization: `int8`, `float16`, `float32` (ignored with `mlx`, which runs fp16) |
-| `--language` | auto-detect | Language code, e.g. `zh`, `en`, `ja`. Auto-detection runs per window on its speech only (Silero VAD); windows without speech are skipped |
+| `--language` | auto-detect | Language code, e.g. `zh`, `en`, `ja`. Auto-detection runs per window on its speech only (Silero VAD), averaged over up to 2 minutes of it; an unsure window keeps the previous language, and windows without speech are skipped |
 | `--prompt` | | Extra text for Whisper, e.g. topic or names |
 | `--glossary` | `~/.config/ytcc/glossary.md` | Glossary file; `--no-glossary` to skip it |
 | `--window` | `300` | Target window length in seconds |

@@ -32,7 +32,7 @@ class FakeBackend(ASRBackend):
         return [Segment(0.5, len(samples) / SR, f"call {self.calls}")]
 
     def detect_language(self, samples):
-        return "en", 1.0
+        return {"en": 1.0}
 
     def count_tokens(self, text):
         return len(text)
@@ -230,3 +230,32 @@ def test_failed_decodes_and_low_confidence_loops_are_dropped():
     # Backends that report no confidence keep everything
     unknown = [Segment(t, t + 0.5, "Am I") for t in range(5)]
     assert pipeline._drop_loops(unknown) == unknown
+
+
+class LanguageBackend(FakeBackend):
+    """Detects the languages in `pieces`, one per call."""
+
+    def __init__(self, pieces):
+        super().__init__()
+        self.pieces = list(pieces)
+
+    def detect_language(self, samples):
+        return self.pieces.pop(0)
+
+
+def test_language_averaged_over_speech_pieces():
+    samples = np.zeros(300 * SR, np.float32)
+    speech = [(0.0, 300.0)]
+    opening = {"en": 0.53, "zh": 0.41}
+    later = {"zh": 0.9, "en": 0.08}
+    # A few English words in the first 30 s don't decide the window
+    backend = LanguageBackend([opening, later, later, later])
+    assert pipeline._detect_language(backend, samples, speech, None) == "zh"
+    assert not backend.pieces  # four pieces of 30 s were scored
+    # An unsure window keeps the previous window's language
+    unsure = {"en": 0.5, "zh": 0.45}
+    backend = LanguageBackend([unsure] * 4)
+    assert pipeline._detect_language(backend, samples, speech, "zh") == "zh"
+    # Less than 30 s of speech is scored as one piece
+    backend = LanguageBackend([later])
+    assert pipeline._detect_language(backend, samples, [(0.0, 20.0)], None) == "zh"

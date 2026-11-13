@@ -26,6 +26,12 @@ SEARCH_SEC = 30.0
 # or the other side talking; a wrong guess garbles or translates the window.
 # Windows with less speech than this keep the previous window's language.
 DETECT_SPEECH_SEC = 10.0
+# The probabilities are averaged over up to this many 30 s pieces of speech:
+# a meeting that opens with a few words of English scored en 0.53 / zh 0.41 on
+# its first 30 s, and zh 0.88-0.92 on each of the next three.
+DETECT_PIECES = 4
+# Below this averaged probability a window keeps the previous window's language
+DETECT_MIN_PROB = 0.6
 
 # Whisper writes text over silence ("Thank you."); drop segments that are
 # mostly outside the speech the VAD found
@@ -184,10 +190,20 @@ def _detect_language(
     backend: ASRBackend, samples: np.ndarray, regions: list[tuple[float, float]], previous: str | None
 ) -> str:
     rate = audio.SAMPLE_RATE
-    clip = np.concatenate([samples[int(a * rate) : int(b * rate)] for a, b in regions])[: 30 * rate]
-    if previous and len(clip) < DETECT_SPEECH_SEC * rate:
+    speech, _ = audio.speech_only(samples, regions)
+    if previous and len(speech) < DETECT_SPEECH_SEC * rate:
         return previous
-    return backend.detect_language(clip)[0]
+    piece = 30 * rate
+    # Whole pieces only, except when there is less than one
+    count = min(DETECT_PIECES, max(len(speech) // piece, 1))
+    totals: dict[str, float] = {}
+    for i in range(count):
+        for language, p in backend.detect_language(speech[i * piece : (i + 1) * piece]).items():
+            totals[language] = totals.get(language, 0.0) + p / count
+    best = max(totals, key=totals.get)
+    if previous and totals[best] < DETECT_MIN_PROB:
+        return previous
+    return best
 
 
 def _is_speech(segment: Segment, regions: list[tuple[float, float]]) -> bool:

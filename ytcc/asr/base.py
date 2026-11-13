@@ -24,8 +24,8 @@ class ASRBackend(ABC):
         ...
 
     @abstractmethod
-    def detect_language(self, audio: np.ndarray) -> tuple[str, float]:
-        """Most likely language of the first 30 s of audio, and its probability."""
+    def detect_language(self, audio: np.ndarray) -> dict[str, float]:
+        """Probability of each language in the first 30 s of audio."""
         ...
 
     @abstractmethod

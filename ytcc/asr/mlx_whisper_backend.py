@@ -67,13 +67,12 @@ class MLXWhisperBackend(ASRBackend):
             if s["text"].strip()
         ]
 
-    def detect_language(self, audio: np.ndarray) -> tuple[str, float]:
+    def detect_language(self, audio: np.ndarray) -> dict[str, float]:
         # The same model instance and steps mlx_whisper.transcribe uses
         model = ModelHolder.get_model(self._repo, mx.float16)
         mel = log_mel_spectrogram(audio, n_mels=model.dims.n_mels)
         _, probs = model.detect_language(pad_or_trim(mel, N_FRAMES, axis=-2).astype(mx.float16))
-        language = max(probs, key=probs.get)
-        return language, probs[language]
+        return {language: float(p) for language, p in probs.items()}
 
     def count_tokens(self, text: str) -> int:
         # Same BPE vocabulary for every multilingual Whisper model; only the

@@ -43,9 +43,9 @@ class FasterWhisperBackend(ASRBackend):
             if s.text.strip()
         ]
 
-    def detect_language(self, audio: np.ndarray) -> tuple[str, float]:
-        language, probability, _ = self._model.detect_language(audio)
-        return language, probability
+    def detect_language(self, audio: np.ndarray) -> dict[str, float]:
+        _, _, probabilities = self._model.detect_language(audio)
+        return dict(probabilities)
 
     def count_tokens(self, text: str) -> int:
         # faster-whisper encodes hotwords as " " + hotwords.strip()
