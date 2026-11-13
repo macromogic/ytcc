@@ -55,7 +55,14 @@ class MLXWhisperBackend(ASRBackend):
                 word_timestamps=True,  # required by hallucination_silence_threshold
             )
         return [
-            Segment(start=s["start"], end=s["end"], text=s["text"].strip())
+            Segment(
+                start=s["start"],
+                end=s["end"],
+                text=s["text"].strip(),
+                avg_logprob=s.get("avg_logprob"),
+                no_speech_prob=s.get("no_speech_prob"),
+                compression_ratio=s.get("compression_ratio"),
+            )
             for s in result["segments"]
             if s["text"].strip()
         ]

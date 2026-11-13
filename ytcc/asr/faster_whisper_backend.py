@@ -31,7 +31,14 @@ class FasterWhisperBackend(ASRBackend):
             condition_on_previous_text=False,
         )
         return [
-            Segment(start=s.start, end=s.end, text=s.text.strip())
+            Segment(
+                start=s.start,
+                end=s.end,
+                text=s.text.strip(),
+                avg_logprob=s.avg_logprob,
+                no_speech_prob=s.no_speech_prob,
+                compression_ratio=s.compression_ratio,
+            )
             for s in segments
             if s.text.strip()
         ]

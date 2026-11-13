@@ -34,6 +34,20 @@ MIN_SPEECH_SEC = 1.0
 # Subtitle credits from Whisper's training data
 HALLUCINATIONS = re.compile(r"请不吝点赞|点赞.{0,4}订阅|订阅.{0,4}转发|字幕(由|by|提供|制作|製作)|明镜与点点|Amara\.org", re.I)
 
+# Whisper's own signals for decodes that went wrong over speech, where the VAD
+# check above can't help. Measured on real meetings (mlx, large-v3-turbo), whose
+# no_speech_prob is always 0 and so is not used:
+# - Whisper retries a decode at higher temperatures while its text compresses
+#   better than 2.4 (a repetition loop); above that, every retry failed too
+#   ("Just..." 22 times, ratio 15.9).
+MAX_COMPRESSION_RATIO = 2.4
+# - A loop that compresses poorly, because Whisper split it into many short
+#   segments ("Am I" 9 times at avg_logprob -2.67). Low log-probability alone is
+#   no test: real speech in a mixed-language meeting scores as low, and
+#   repeated backchannels ("嗯", "对") as low as -1.5.
+LOOP_MIN_REPEATS = 3
+LOOP_MAX_LOGPROB = -2.0
+
 Decoder = Callable[[Path, float, float | None], np.ndarray]
 SpeechFinder = Callable[[np.ndarray], list[tuple[float, float]]]
 
@@ -119,7 +133,9 @@ def _transcribe(
         if regions:
             if not state.options.language:
                 language = _detect_language(backend, samples, regions, language)
-            segments = [s for s in backend.transcribe(samples, language) if _is_speech(s, regions)]
+            segments = _drop_loops(
+                [s for s in backend.transcribe(samples, language) if _is_speech(s, regions)]
+            )
         else:
             segments = []  # don't let Whisper hallucinate over silence
     except Exception as exc:
@@ -175,8 +191,28 @@ def _detect_language(
 def _is_speech(segment: Segment, regions: list[tuple[float, float]]) -> bool:
     if HALLUCINATIONS.search(segment.text):
         return False
+    if segment.compression_ratio is not None and segment.compression_ratio > MAX_COMPRESSION_RATIO:
+        return False
     overlap = sum(max(0.0, min(b, segment.end) - max(a, segment.start)) for a, b in regions)
     return overlap >= min(MIN_SPEECH_SEC, MIN_SPEECH_RATIO * (segment.end - segment.start))
+
+
+def _drop_loops(segments: list[Segment]) -> list[Segment]:
+    """Remove runs of LOOP_MIN_REPEATS or more identical, low-confidence segments."""
+    kept: list[Segment] = []
+    i = 0
+    while i < len(segments):
+        j = i
+        while j < len(segments) and segments[j].text == segments[i].text:
+            j += 1
+        run = segments[i:j]
+        loop = len(run) >= LOOP_MIN_REPEATS and all(
+            s.avg_logprob is not None and s.avg_logprob < LOOP_MAX_LOGPROB for s in run
+        )
+        if not loop:
+            kept.extend(run)
+        i = j
+    return kept
 
 
 def _record(out_dir: Path, state: State, window: Window, end: float) -> None:

@@ -186,3 +186,23 @@ def test_faster_whisper_does_not_condition_on_previous_text(monkeypatch):
     fw.FasterWhisperBackend(prompt="Kubernetes").transcribe(np.zeros(SR, np.float32), "en")
     assert seen["condition_on_previous_text"] is False
     assert seen["hotwords"] == "Kubernetes"
+
+
+def test_failed_decodes_and_low_confidence_loops_are_dropped():
+    def seg(t, text, logprob=-0.3, ratio=1.2):
+        return Segment(t, t + 0.5, text, avg_logprob=logprob, compression_ratio=ratio)
+
+    everywhere = [(0.0, 100.0)]
+    # Whisper gave up on the decode: its text compresses too well
+    assert not pipeline._is_speech(seg(1, "Just...", ratio=15.9), everywhere)
+    assert pipeline._is_speech(seg(1, "Just...", ratio=2.0), everywhere)
+
+    loop = [seg(t, "Am I", logprob=-2.67) for t in range(10, 19)]
+    backchannels = [seg(t, "嗯", logprob=-1.47) for t in range(20, 25)]
+    short_run = [seg(30, "skunk", logprob=-3.9), seg(31, "skunk", logprob=-3.9)]
+    kept = pipeline._drop_loops([seg(0, "Hello"), *loop, *backchannels, *short_run])
+    assert [s.text for s in kept] == ["Hello"] + ["嗯"] * 5 + ["skunk"] * 2
+
+    # Backends that report no confidence keep everything
+    unknown = [Segment(t, t + 0.5, "Am I") for t in range(5)]
+    assert pipeline._drop_loops(unknown) == unknown
