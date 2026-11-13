@@ -10,7 +10,13 @@ from ytcc import audio
 from ytcc.asr.base import ASRBackend
 from ytcc.models import Segment
 from ytcc.storage.state import State, Window, save_state
-from ytcc.storage.transcript_writer import append_segments, fmt_time, render_transcript
+from ytcc.storage.transcript_writer import (
+    append_segments,
+    fmt_time,
+    read_segments,
+    render_transcript,
+    write_segments,
+)
 
 # How far around the nominal window length to look for a pause to cut at
 SEARCH_SEC = 30.0
@@ -50,6 +56,7 @@ def run(
     """
     source = Path(state.audio)
     language = state.options.language
+    _drop_unfinished_segments(out_dir, state)
 
     if retry_failed:
         for window in state.failed:
@@ -134,6 +141,25 @@ def _transcribe(
     render_transcript(out_dir)
     click.echo(f" done ({len(segments)} segments, {language})" if regions else " no speech")
     return language
+
+
+def _drop_unfinished_segments(out_dir: Path, state: State) -> None:
+    """
+    Remove segments outside the windows state.json records as done.
+
+    Segments are appended before the state is saved, so a run stopped between
+    the two leaves a window's segments on disk while the window itself is
+    transcribed again; without this its lines would appear twice.
+    """
+    segments = read_segments(out_dir)
+    done = [(w.start, w.end) for w in state.windows if w.status == "done"]
+    # Stored times are rounded to 3 decimals. Half-open: a segment at 0.0 s of
+    # the unfinished window starts exactly where the last done window ends.
+    kept = [s for s in segments if any(a - 0.01 <= s.start < b - 0.001 for a, b in done)]
+    if len(kept) < len(segments):
+        write_segments(out_dir, kept)
+        render_transcript(out_dir)
+        click.echo(f"Removed {len(segments) - len(kept)} segment(s) of an unfinished window.")
 
 
 def _detect_language(

@@ -24,6 +24,11 @@ class FasterWhisperBackend(ASRBackend):
             # hotwords is prepended to every 30 s decode; initial_prompt would
             # only reach the first one once the prompt resets
             hotwords=self.prompt,
+            # Off, as in the mlx backend. On, faster-whisper puts up to 223
+            # tokens of previous text after the hotwords, which with a full
+            # glossary leaves almost none of the 448-token context for new
+            # text; conditioning is also what sends Whisper into repetition loops.
+            condition_on_previous_text=False,
         )
         return [
             Segment(start=s.start, end=s.end, text=s.text.strip())

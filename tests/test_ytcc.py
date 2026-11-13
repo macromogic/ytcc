@@ -152,3 +152,37 @@ def test_decode_with_ffmpeg(tmp_path):
     assert abs(len(samples) / SR - 2) < 0.05
     assert samples.dtype == np.float32 and np.abs(samples).max() > 0.1
 
+
+def test_resume_after_stop_between_segments_and_state(tmp_path):
+    # A run stopped after a window's segments were written but before state.json
+    # recorded the window: resume transcribes it again without duplicating it
+    state = make_state(duration=200)
+    run(tmp_path, state, FakeBackend())
+    expected = [(s.start, s.end) for s in read_segments(tmp_path)]
+
+    state = load_state(tmp_path)
+    last = state.windows.pop()
+    state.position = last.start
+    run(tmp_path, state, FakeBackend())
+
+    assert state.complete
+    assert [(s.start, s.end) for s in read_segments(tmp_path)] == expected
+
+
+def test_faster_whisper_does_not_condition_on_previous_text(monkeypatch):
+    from ytcc.asr import faster_whisper_backend as fw
+
+    seen = {}
+
+    class FakeModel:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def transcribe(self, audio, **kwargs):
+            seen.update(kwargs)
+            return [], None
+
+    monkeypatch.setattr(fw, "WhisperModel", FakeModel)
+    fw.FasterWhisperBackend(prompt="Kubernetes").transcribe(np.zeros(SR, np.float32), "en")
+    assert seen["condition_on_previous_text"] is False
+    assert seen["hotwords"] == "Kubernetes"
