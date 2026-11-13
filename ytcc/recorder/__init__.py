@@ -97,9 +97,20 @@ def helper() -> Path:
     if swiftc is None:
         raise RecorderError("swiftc not found; install the Xcode Command Line Tools (xcode-select --install).")
     binary.parent.mkdir(parents=True, exist_ok=True)
+    # Another process may be building at the same time (Raycast runs
+    # `ytcc record detect` every 10 s): build into a file of our own, and
+    # remove other versions' binaries and abandoned builds, never a build in progress
     for old in binary.parent.glob("ytcc-rec-*"):
-        old.unlink()
-    tmp = binary.with_suffix(".tmp")
+        if old.suffix == ".tmp":
+            try:
+                abandoned = time.time() - old.stat().st_mtime > 600
+            except FileNotFoundError:
+                continue
+            if not abandoned:
+                continue
+        if old != binary:
+            old.unlink(missing_ok=True)
+    tmp = binary.with_name(f"{binary.name}.{os.getpid()}.tmp")
     result = subprocess.run(
         [
             swiftc, "-O", str(SOURCES[0]), "-o", str(tmp),
@@ -110,6 +121,7 @@ def helper() -> Path:
         text=True,
     )
     if result.returncode != 0:
+        tmp.unlink(missing_ok=True)
         raise RecorderError(f"Building the recorder failed:\n{result.stderr}")
     tmp.replace(binary)
     return binary
