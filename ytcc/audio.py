@@ -70,6 +70,74 @@ def find_cut(audio: np.ndarray, target: float, search: float, frame: float = 0.1
     return (lo + best * frame_len + frame_len / 2) / SAMPLE_RATE
 
 
+# Pauses shorter than this stay in the speech-only audio: they are where
+# Whisper ends its segments, and without them it runs utterances together into
+# segments that skip speech (faster-whisper's own VAD keeps up to 2 s too)
+KEEP_PAUSE_SEC = 2.0
+
+
+class SpeechMap:
+    """Maps times in speech-only audio (see speech_only) back to the original audio."""
+
+    def __init__(self, regions: list[tuple[float, float]]) -> None:
+        # (start in speech-only audio, start in original, length), seconds
+        self._pieces: list[tuple[float, float, float]] = []
+        offset = 0.0
+        for a, b in regions:
+            self._pieces.append((offset, a, b - a))
+            offset += b - a
+
+    def _piece(self, t: float, is_end: bool) -> int:
+        for i, (start, _, length) in enumerate(self._pieces):
+            if t < start + length or (is_end and t <= start + length):
+                return i
+        return len(self._pieces) - 1
+
+    def original(self, t: float, is_end: bool = False) -> float:
+        """
+        Original time of t. A time on the joint of two regions is the end of the
+        first when is_end, else the start of the second.
+        """
+        if not self._pieces:
+            return t
+        start, orig, length = self._pieces[self._piece(t, is_end)]
+        # Clamped: Whisper's last timestamp can overshoot the audio
+        return orig + min(max(t - start, 0.0), length)
+
+    def span(self, start: float, end: float) -> tuple[float, float]:
+        """
+        Original (start, end) of a segment, its end cut at the end of the region
+        it starts in, so it never stretches over the silence that was left out.
+        """
+        if not self._pieces:
+            return start, end
+        first = self._piece(start, is_end=False)
+        if self._piece(end, is_end=True) > first:
+            _, orig, length = self._pieces[first]
+            return self.original(start), orig + length
+        return self.original(start), self.original(end, is_end=True)
+
+
+def speech_only(audio: np.ndarray, regions: list[tuple[float, float]]) -> tuple[np.ndarray, SpeechMap]:
+    """
+    Join the speech regions of audio, leaving out pauses of KEEP_PAUSE_SEC or more.
+
+    Whisper spends no time on long silence and gets no chance to write text
+    over it. Timestamps from the result go back through the returned SpeechMap.
+    """
+    rate = SAMPLE_RATE
+    merged: list[list[float]] = []
+    for a, b in regions:
+        if merged and a - merged[-1][1] < KEEP_PAUSE_SEC:
+            merged[-1][1] = b
+        else:
+            merged.append([a, b])
+    spans = [(int(a * rate), min(int(b * rate), len(audio))) for a, b in merged]
+    spans = [(a, b) for a, b in spans if b > a]
+    joined = np.concatenate([audio[a:b] for a, b in spans]) if spans else audio[:0]
+    return joined, SpeechMap([(a / rate, b / rate) for a, b in spans])
+
+
 def speech_regions(audio: np.ndarray) -> list[tuple[float, float]]:
     """Return the (start, end) seconds of speech in audio, found with Silero VAD."""
     from faster_whisper.vad import VadOptions, get_speech_timestamps

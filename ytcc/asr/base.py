@@ -17,6 +17,8 @@ class ASRBackend(ABC):
         """
         Transcribe 16 kHz mono float32 audio; language None detects it from the first 30 s.
 
+        The pipeline passes speech only, with the silence between utterances cut out.
+
         Returned timestamps are window-local (start from 0).
         """
         ...

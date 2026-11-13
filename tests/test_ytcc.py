@@ -17,20 +17,19 @@ SR = audio.SAMPLE_RATE
 
 
 class FakeBackend(ASRBackend):
-    """Returns one segment per window; fails on the calls listed in fail_calls."""
+    """Returns one segment per call, over all audio it got; fails on the calls listed in fail_calls."""
 
     def __init__(self, fail_calls=()):
         self.calls = 0
         self.fail_calls = set(fail_calls)
+        self.received = []  # seconds of audio per call
 
     def transcribe(self, samples, language):
         self.calls += 1
+        self.received.append(len(samples) / SR)
         if self.calls in self.fail_calls:
             raise RuntimeError("boom")
-        return [
-            Segment(0.5, len(samples) / SR, f"call {self.calls}"),
-            Segment(0.5, 3, "Thank you."),  # over silence, see fake_speech
-        ]
+        return [Segment(0.5, len(samples) / SR, f"call {self.calls}")]
 
     def detect_language(self, samples):
         return "en", 1.0
@@ -49,8 +48,8 @@ def fake_decode(source, start, length, real_duration=200):
 
 
 def fake_speech(samples):
-    # Speech everywhere except the first 4 s
-    return [(4.0, len(samples) / SR)]
+    # Speech except in the first 4 s and at 20-30 s of each window
+    return [(4.0, 20.0), (30.0, len(samples) / SR)]
 
 
 def run(out_dir, state, backend, **kwargs):
@@ -78,10 +77,35 @@ def test_windows_cut_in_pauses_and_cover_everything(tmp_path):
     for prev, nxt in zip(state.windows, state.windows[1:]):
         assert prev.end == nxt.start
         assert 9 <= prev.end % 10 <= 10  # cut inside a pause
-    # Segment times are global; "Thank you." over silence is dropped
+def test_whisper_gets_speech_only_and_times_map_back(tmp_path):
+    state = make_state(duration=200)
+    backend = FakeBackend()
+    run(tmp_path, state, backend)
+
+    # The 4 s and 10 s of silence in each window never reach Whisper
+    assert backend.received == pytest.approx([w.end - w.start - 14 for w in state.windows], abs=1e-3)
+    # 0.5 s into the speech-only audio is 4.5 s into the window. The fake
+    # segment runs over the left-out 20-30 s, so it ends where its region ends.
     segments = read_segments(tmp_path)
-    assert [round(s.start - 0.5, 3) for s in segments] == [round(w.start, 3) for w in state.windows]
-    assert (tmp_path / "transcript.md").read_text().startswith("[00:00:00] call 1")
+    assert [s.start for s in segments] == pytest.approx([w.start + 4.5 for w in state.windows], abs=1e-3)
+    assert [s.end for s in segments] == pytest.approx([w.start + 20 for w in state.windows], abs=1e-3)
+    assert (tmp_path / "transcript.md").read_text().startswith("[00:00:04] call 1")
+
+
+def test_speech_map():
+    samples = np.arange(12 * SR, dtype=np.float32)
+    # The 1 s pause at 3-4 s is kept; the 2 s pause at 6-8 s is left out
+    joined, speech_map = audio.speech_only(samples, [(1.0, 3.0), (4.0, 6.0), (8.0, 13.0)])
+    assert len(joined) == 9 * SR  # 1-6 s and 8-12 s; the last region is clipped to the audio
+    assert joined[0] == SR and joined[5 * SR] == 8 * SR
+    assert speech_map.original(2.5) == 3.5  # inside the kept pause
+    # On the joint of two regions: a start belongs to the second, an end to the first
+    assert speech_map.original(5.0) == 8.0
+    assert speech_map.original(5.0, is_end=True) == 6.0
+    assert speech_map.original(99, is_end=True) == 12.0  # overshoot clamps to the last region
+    # A segment over the joint ends where its first region ends
+    assert speech_map.span(4.0, 7.0) == (5.0, 6.0)
+    assert speech_map.span(5.5, 7.0) == (8.5, 10.0)
 
 
 @pytest.mark.parametrize("probed", [150, 260])

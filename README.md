@@ -139,7 +139,7 @@ audio.py          decode window → numpy   ├→ pipeline → ASR → storage
                                           └→ meeting.py: merge tracks, summarize
 ```
 
-`pipeline.py` decodes one window at a time from the source, cuts it at a pause, transcribes it, and checkpoints `state.json`. The `ASRBackend` interface is swappable: `asr/faster_whisper_backend.py` serves `cpu`/`cuda`, and `asr/mlx_whisper_backend.py` serves `mlx` (Apple Silicon). `asr/device.py` picks one per `--device`.
+`pipeline.py` decodes one window at a time from the source, cuts it at a pause, finds its speech with Silero VAD, transcribes only that speech (the silence between utterances is cut out and timestamps are mapped back), drops segments Whisper's own scores mark as failed or looping, and checkpoints `state.json`. The `ASRBackend` interface is swappable: `asr/faster_whisper_backend.py` serves `cpu`/`cuda`, and `asr/mlx_whisper_backend.py` serves `mlx` (Apple Silicon). `asr/device.py` picks one per `--device`.
 
 ## Tests
 

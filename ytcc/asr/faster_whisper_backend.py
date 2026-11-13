@@ -20,7 +20,7 @@ class FasterWhisperBackend(ASRBackend):
         segments, _ = self._model.transcribe(
             audio,
             language=language,
-            vad_filter=True,  # skip silent regions
+            # No vad_filter: the pipeline passes speech only (audio.speech_only)
             # hotwords is prepended to every 30 s decode; initial_prompt would
             # only reach the first one once the prompt resets
             hotwords=self.prompt,

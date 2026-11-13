@@ -133,9 +133,11 @@ def _transcribe(
         if regions:
             if not state.options.language:
                 language = _detect_language(backend, samples, regions, language)
-            segments = _drop_loops(
-                [s for s in backend.transcribe(samples, language) if _is_speech(s, regions)]
-            )
+            speech_audio, speech_map = audio.speech_only(samples, regions)
+            segments = backend.transcribe(speech_audio, language)
+            for seg in segments:
+                seg.start, seg.end = speech_map.span(seg.start, seg.end)
+            segments = _drop_loops([s for s in segments if _is_speech(s, regions)])
         else:
             segments = []  # don't let Whisper hallucinate over silence
     except Exception as exc:
