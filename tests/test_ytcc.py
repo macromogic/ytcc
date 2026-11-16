@@ -1,3 +1,4 @@
+import json
 import shutil
 import subprocess
 
@@ -298,3 +299,20 @@ def test_old_state_without_zh_script_resumes(tmp_path):
     del data["options"]["zh_script"]
     (tmp_path / "state.json").write_text(json.dumps(data))
     assert load_state(tmp_path).options.zh_script == "simplified"
+
+
+def test_detect_ignores_background_speech_services(monkeypatch):
+    from ytcc import recorder
+
+    inputs = [
+        {"pid": 101, "bundle_id": "com.apple.CoreSpeech"},
+        {"pid": 102, "bundle_id": "us.zoom.xos"},
+    ]
+    monkeypatch.setattr(recorder, "helper", lambda: "ytcc-rec")
+    monkeypatch.setattr(recorder, "current", lambda: None)
+    monkeypatch.setattr(
+        recorder.subprocess, "run",
+        lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout=json.dumps({"inputs": inputs}), stderr=""),
+    )
+    result = recorder.detect()
+    assert [app["name"] for app in result["apps"]] == ["Zoom"]

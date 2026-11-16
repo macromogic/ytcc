@@ -48,6 +48,7 @@ MEETING_APPS = {
 IGNORED_APPS = (
     "io.github.macromogic.ytcc-rec",
     "com.apple.SpeechRecognitionCore",
+    "com.apple.CoreSpeech",  # "Hey Siri" listener; keeps the microphone open in the background
     "com.apple.assistantd",
     "com.finetuneapp.FineTune",  # per-app volume utility; follows other apps' audio
 )
